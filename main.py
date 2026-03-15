@@ -395,6 +395,23 @@ def start_health_server(port: int) -> None:
     server.serve_forever()
 
 
+def self_ping_loop() -> None:
+    """Пингует сам себя каждые 10 минут чтобы Render не засыпал."""
+    import httpx as _httpx
+    import time as _time
+    url = os.getenv("RENDER_EXTERNAL_URL", "")
+    if not url:
+        return
+    _time.sleep(60)  # Ждём пока сервер стартует
+    while True:
+        try:
+            _httpx.get(url, timeout=10)
+            logger.info("Self-ping OK")
+        except Exception as e:
+            logger.warning(f"Self-ping failed: {e}")
+        _time.sleep(600)  # Каждые 10 минут
+
+
 def main() -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
@@ -408,6 +425,9 @@ def main() -> None:
     port = int(os.getenv("PORT", 10000))
     threading.Thread(target=start_health_server, args=(port,), daemon=True).start()
     logger.info(f"Health server started on port {port}")
+
+    # Самопинг чтобы Render не засыпал
+    threading.Thread(target=self_ping_loop, daemon=True).start()
 
     app = Application.builder().token(token).build()
 
